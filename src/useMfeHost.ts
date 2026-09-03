@@ -28,7 +28,12 @@ interface MfeHost {
 interface HostData {
 	recordId?: string;
 	userId?: string;
-	account?: AccountContext | null;
+	// The host sends account fields as FLAT scalars because the lwc-shell data
+	// channel stringifies values (a nested object would arrive as
+	// "[object Object]"). We reassemble them below.
+	accountId?: string;
+	accountName?: string;
+	accountEmail?: string;
 	pageUrl?: string | null;
 	[k: string]: unknown;
 }
@@ -51,7 +56,18 @@ export function useMfeHost(): MfeHost {
 			const id = typeof data?.recordId === "string" ? data.recordId : null;
 			setRecordId(id);
 			setUserId(typeof data?.userId === "string" ? data.userId : null);
-			setAccount(data?.account ?? null);
+			// Reassemble the account from the flat scalar fields. Present only on
+			// an Account record page; on the utility bar accountId is empty → null.
+			const accId = typeof data?.accountId === "string" ? data.accountId : "";
+			setAccount(
+				accId
+					? {
+							id: accId,
+							name: typeof data?.accountName === "string" ? data.accountName : "",
+							email: typeof data?.accountEmail === "string" ? data.accountEmail : "",
+					  }
+					: null,
+			);
 			setPageUrl(typeof data?.pageUrl === "string" ? data.pageUrl : null);
 			if (id) void fetchLead(id);
 		};
