@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/mfe", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/api/canvas",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "frame-ancestors 'self' https://*.salesforce.com https://*.force.com https://*.visualforce.com https://*.lightning.force.com"
+        }
+      ]
+    }
+  ]
+}
