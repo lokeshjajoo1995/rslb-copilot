@@ -12,7 +12,7 @@ import "./App.css";
  * can run side by side for comparison.
  */
 export default function Embed() {
-	const { connected, account } = useViewSdkHost();
+	const { connected, account, debug } = useViewSdkHost();
 
 	return (
 		<div className="page">
@@ -36,6 +36,20 @@ export default function Embed() {
 							? "🟢 UI Embedding connected"
 							: "🟡 Not connected (standalone)"}
 					</span>
+					<pre
+						style={{
+							background: "#0f1720",
+							color: "#d6e2f0",
+							padding: 12,
+							borderRadius: 6,
+							fontSize: 11,
+							marginTop: 10,
+							whiteSpace: "pre-wrap",
+							wordBreak: "break-word",
+						}}
+					>
+						{debug}
+					</pre>
 				</section>
 
 				{account ? (
