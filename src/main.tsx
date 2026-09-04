@@ -1,3 +1,13 @@
+// SIDE-EFFECT IMPORT — MUST be first, at the app entry. This is what actually
+// starts the ui-embedding session: importing this subpath runs bootstrapSession()
+// at module load, which registers the handshake listener that answers the host's
+// <lightning-ui-embedding> postMessage. Without it, getViewSDK() awaits a session
+// that was never bootstrapped and hangs forever (the "init: calling getViewSDK()…"
+// freeze). The bare `{ getViewSDK }` import gives the function but never boots the
+// session. The SDK's own error text: "Import '@salesforce/platform-sdk/ui-embedding'
+// at app entry and run inside an ui-embedding iframe." Recipe: GuestLayout.tsx.
+import '@salesforce/platform-sdk/ui-embedding'
+
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 // Embed is imported STATICALLY (not lazily): the Platform SDK handshake is
