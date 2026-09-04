@@ -45,13 +45,16 @@ export function useViewSdkHost(): ViewSdkHost {
 		let unsubscribe: (() => void) | undefined;
 
 		// If the SDK never resolves within 5s, say so (vs a silent spinner).
+		// Guard on a ref-like flag set in .then so we don't append after connect.
+		let settled = false;
 		const t = window.setTimeout(() => {
-			if (!cancelled) setDebug((d) => (connected ? d : d + " | ⏱ 5s: getViewSDK() still pending"));
+			if (!cancelled && !settled) setDebug("⏱ 5s: getViewSDK() still pending (host bridge not responding)");
 		}, 5000);
 
 		getViewSDK()
 			.then((sdk) => {
 				if (cancelled) return;
+				settled = true;
 				setDebug("getViewSDK() resolved; calling getUiState()…");
 				const ui = sdk.getUiState?.();
 				if (!ui) {
@@ -68,6 +71,7 @@ export function useViewSdkHost(): ViewSdkHost {
 			})
 			.catch((e: unknown) => {
 				if (cancelled) return;
+				settled = true;
 				// Surface the rejection instead of silently falling back.
 				setDebug(
 					"getViewSDK() REJECTED: " +
