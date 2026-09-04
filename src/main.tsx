@@ -1,5 +1,13 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+// Embed is imported STATICALLY (not lazily): the Platform SDK handshake is
+// timing-sensitive — getViewSDK() must fire as early as possible after
+// <lightning-ui-embedding> mounts the iframe, or the handshake window is missed
+// and it hangs. A dynamic import would delay that call by a chunk fetch. Embed's
+// tree pulls ONLY @salesforce/platform-sdk (never App.tsx / the legacy
+// experimental-mfe-bridge), so importing it here does not reintroduce the
+// double-bridge race.
+import Embed from './Embed.tsx'
 
 const path = window.location.pathname.replace(/\/+$/, '')
 
@@ -12,24 +20,18 @@ if (embedded) document.documentElement.classList.add('mfe-embedded')
 
 const rootEl = createRoot(document.getElementById('root')!)
 
-// IMPORTANT: route with DYNAMIC imports so each route pulls ONLY its own code.
-//   /embed → GA <lightning-ui-embedding> guest (Platform SDK) — must NEVER load
-//            App.tsx's tree, which side-effect-imports the legacy
-//            @salesforce/experimental-mfe-bridge. That bridge boots a second
-//            postMessage handshake that RACES getViewSDK() (the cause of the
-//            intermittent "init: calling getViewSDK()…" hang).
-//   /mfe, / → the dev-preview lwc-shell app (login → chat → policies), which
-//            side-effect-imports the experimental bridge on load.
 if (path === '/embed') {
-  void import('./Embed.tsx').then(({ default: Embed }) => {
-    rootEl.render(
-      <StrictMode>
-        <Embed />
-      </StrictMode>,
-    )
-  })
+  // GA <lightning-ui-embedding> guest (Platform SDK). Rendered synchronously so
+  // getViewSDK() fires immediately. App.tsx's tree (and its legacy bridge) is
+  // never imported on this route → no second postMessage handshake to race.
+  rootEl.render(
+    <StrictMode>
+      <Embed />
+    </StrictMode>,
+  )
 } else {
-  // Boot the lwc-shell bridge only for the lwc-shell routes.
+  // The dev-preview lwc-shell app (login → chat → policies). Lazy-load it and
+  // its bridge only for the lwc-shell routes (/mfe, /).
   void import('@salesforce/experimental-mfe-bridge')
   void import('./App.tsx').then(({ default: App }) => {
     rootEl.render(
