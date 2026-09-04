@@ -44,6 +44,44 @@ export function useViewSdkHost(): ViewSdkHost {
 		let cancelled = false;
 		let unsubscribe: (() => void) | undefined;
 
+		// DECISIVE DIAGNOSTIC — is the ui-embedding session even possible here?
+		// The guest handshake REQUIRES a `hostMetaData` query param on the iframe
+		// URL (<lightning-ui-embedding> is supposed to append it: instanceId +
+		// hostAppOrigin). If it's absent, getViewSDK() can NEVER connect — that's a
+		// host/platform problem, not guest code. Surface it in the panel so we stop
+		// guessing: we can read reject-vs-hang and metadata-present straight off the
+		// screen without switching the console to the iframe frame.
+		let hasHostMeta = false;
+		try {
+			hasHostMeta = new URLSearchParams(window.location.search).has("hostMetaData");
+		} catch {
+			hasHostMeta = false;
+		}
+		// eslint-disable-next-line no-console
+		console.log(
+			"uiEmbed[guest] BOOT url=", window.location.href,
+			"| hostMetaData present=", hasHostMeta,
+			"| inIframe=", (() => { try { return window.parent !== window; } catch { return true; } })(),
+		);
+		setDebug(
+			`init: getViewSDK()… | hostMetaData=${hasHostMeta ? "PRESENT" : "MISSING"} | iframe=${(() => { try { return window.parent !== window; } catch { return true; } })()}`,
+		);
+
+		// A visible "still hanging" marker: if getViewSDK() neither resolves nor
+		// rejects within 6s, the panel says so — distinguishing a true hang (host
+		// never completed the port handshake) from a fast reject (no session). This
+		// does NOT call getViewSDK() again — it only updates the debug text.
+		const hangTimer = setTimeout(() => {
+			if (cancelled) return;
+			setDebug((d) =>
+				d.startsWith("connected") || d.startsWith("update") || d.includes("REJECTED")
+					? d
+					: `HANG >6s (no resolve, no reject) | hostMetaData=${hasHostMeta ? "PRESENT" : "MISSING"} — host never completed the port handshake`,
+			);
+			// eslint-disable-next-line no-console
+			console.log("uiEmbed[guest] HANG: getViewSDK() unsettled after 6s. hostMetaData=", hasHostMeta);
+		}, 6000);
+
 		// Call getViewSDK() exactly ONCE. It is a singleton handshake — calling it
 		// again while the first is in flight can interfere with / invalidate the
 		// pending connection (an earlier retry loop did exactly that and broke a
@@ -52,6 +90,7 @@ export function useViewSdkHost(): ViewSdkHost {
 		// something a second call fixes.
 		getViewSDK()
 			.then((sdk) => {
+				clearTimeout(hangTimer);
 				if (cancelled) return;
 				const ui = sdk.getUiState?.();
 				if (!ui) {
@@ -72,6 +111,7 @@ export function useViewSdkHost(): ViewSdkHost {
 				});
 			})
 			.catch((e: unknown) => {
+				clearTimeout(hangTimer);
 				if (cancelled) return;
 				setDebug(
 					"getViewSDK() REJECTED: " +
@@ -81,6 +121,7 @@ export function useViewSdkHost(): ViewSdkHost {
 
 		return () => {
 			cancelled = true;
+			clearTimeout(hangTimer);
 			unsubscribe?.();
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps
