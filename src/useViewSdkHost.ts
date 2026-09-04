@@ -44,106 +44,35 @@ export function useViewSdkHost(): ViewSdkHost {
 		let cancelled = false;
 		let unsubscribe: (() => void) | undefined;
 
-		// DECISIVE DIAGNOSTIC — is the ui-embedding session even possible here?
-		// The guest handshake REQUIRES a `hostMetaData` query param on the iframe
-		// URL (<lightning-ui-embedding> is supposed to append it: instanceId +
-		// hostAppOrigin). If it's absent, getViewSDK() can NEVER connect — that's a
-		// host/platform problem, not guest code. Surface it in the panel so we stop
-		// guessing: we can read reject-vs-hang and metadata-present straight off the
-		// screen without switching the console to the iframe frame.
-		let hasHostMeta = false;
-		try {
-			hasHostMeta = new URLSearchParams(window.location.search).has("hostMetaData");
-		} catch {
-			hasHostMeta = false;
-		}
-		// eslint-disable-next-line no-console
-		console.log(
-			"uiEmbed[guest] BOOT url=", window.location.href,
-			"| hostMetaData present=", hasHostMeta,
-			"| inIframe=", (() => { try { return window.parent !== window; } catch { return true; } })(),
-		);
-		setDebug(
-			`init: getViewSDK()… | hostMetaData=${hasHostMeta ? "PRESENT" : "MISSING"} | iframe=${(() => { try { return window.parent !== window; } catch { return true; } })()}`,
-		);
+		// If the SDK never resolves within 5s, say so (vs a silent spinner).
+		// Guard on a ref-like flag set in .then so we don't append after connect.
+		let settled = false;
+		const t = window.setTimeout(() => {
+			if (!cancelled && !settled) setDebug("⏱ 5s: getViewSDK() still pending (host bridge not responding)");
+		}, 5000);
 
-		// RAW MESSAGE SNIFFER — the final decisive diagnostic. hostMetaData is
-		// PRESENT yet getViewSDK() HANGS, meaning the host never completed the port
-		// handshake. Two possibilities remain, with different fixes:
-		//   (a) host sends NOTHING back  → host/platform-side (enablement/preview) —
-		//       no guest fix exists.
-		//   (b) host DOES transfer a port but from an origin/source/instanceId that
-		//       the bridge's validator rejects → it silently drops it and waits
-		//       forever. That we could potentially address.
-		// This passive listener logs every inbound postMessage (origin, whether it
-		// carried a MessagePort, a shape hint) so we can tell (a) from (b) without
-		// guessing. It does NOT interfere with the bridge's own listener.
-		const sniffer = (ev: MessageEvent) => {
-			let shape = "";
-			try {
-				shape =
-					typeof ev.data === "object" && ev.data
-						? "keys=" + Object.keys(ev.data).slice(0, 6).join(",")
-						: "primitive:" + String(ev.data).slice(0, 40);
-			} catch {
-				shape = "unreadable";
-			}
-			// eslint-disable-next-line no-console
-			console.log(
-				"uiEmbed[guest] RAW MSG from origin=", ev.origin,
-				"| fromParent=", ev.source === window.parent,
-				"| ports=", ev.ports?.length ?? 0,
-				"|", shape,
-			);
-		};
-		window.addEventListener("message", sniffer);
-
-		// A visible "still hanging" marker: if getViewSDK() neither resolves nor
-		// rejects within 6s, the panel says so — distinguishing a true hang (host
-		// never completed the port handshake) from a fast reject (no session). This
-		// does NOT call getViewSDK() again — it only updates the debug text.
-		const hangTimer = setTimeout(() => {
-			if (cancelled) return;
-			setDebug((d) =>
-				d.startsWith("connected") || d.startsWith("update") || d.includes("REJECTED")
-					? d
-					: `HANG >6s (no resolve, no reject) | hostMetaData=${hasHostMeta ? "PRESENT" : "MISSING"} — host never completed the port handshake`,
-			);
-			// eslint-disable-next-line no-console
-			console.log("uiEmbed[guest] HANG: getViewSDK() unsettled after 6s. hostMetaData=", hasHostMeta);
-		}, 6000);
-
-		// Call getViewSDK() exactly ONCE. It is a singleton handshake — calling it
-		// again while the first is in flight can interfere with / invalidate the
-		// pending connection (an earlier retry loop did exactly that and broke a
-		// previously-consistent connection). So: one call, no retry, no timeout
-		// racing the SDK. If it hangs, that's a host/preview issue to chase, not
-		// something a second call fixes.
 		getViewSDK()
 			.then((sdk) => {
-				clearTimeout(hangTimer);
 				if (cancelled) return;
+				settled = true;
+				setDebug("getViewSDK() resolved; calling getUiState()…");
 				const ui = sdk.getUiState?.();
 				if (!ui) {
 					setDebug("getViewSDK() resolved but getUiState() returned nothing.");
 					return;
 				}
 				setConnected(true);
-				const initial = (ui.state.props ?? {}) as HostProps;
-				// eslint-disable-next-line no-console
-				console.log("uiEmbed[guest] INITIAL getUiState().state.props:", JSON.stringify(ui.state.props ?? {}), "| account=", JSON.stringify(initial.account ?? null));
-				setProps(initial);
+				setProps((ui.state.props ?? {}) as HostProps);
 				setDebug("connected ✓ props=" + JSON.stringify(ui.state.props ?? {}));
 				unsubscribe = ui.subscribe((next: { props?: HostProps }) => {
-					// eslint-disable-next-line no-console
-					console.log("uiEmbed[guest] SUBSCRIBE update props:", JSON.stringify(next.props ?? {}), "| account=", JSON.stringify(next.props?.account ?? null));
 					setProps((next.props ?? {}) as HostProps);
 					setDebug("update ✓ props=" + JSON.stringify(next.props ?? {}));
 				});
 			})
 			.catch((e: unknown) => {
-				clearTimeout(hangTimer);
 				if (cancelled) return;
+				settled = true;
+				// Surface the rejection instead of silently falling back.
 				setDebug(
 					"getViewSDK() REJECTED: " +
 						(e instanceof Error ? `${e.name}: ${e.message}` : String(e)),
@@ -152,8 +81,7 @@ export function useViewSdkHost(): ViewSdkHost {
 
 		return () => {
 			cancelled = true;
-			clearTimeout(hangTimer);
-			window.removeEventListener("message", sniffer);
+			window.clearTimeout(t);
 			unsubscribe?.();
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps
