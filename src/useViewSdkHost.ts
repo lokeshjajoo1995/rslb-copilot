@@ -59,9 +59,14 @@ export function useViewSdkHost(): ViewSdkHost {
 					return;
 				}
 				setConnected(true);
-				setProps((ui.state.props ?? {}) as HostProps);
+				const initial = (ui.state.props ?? {}) as HostProps;
+				// eslint-disable-next-line no-console
+				console.log("uiEmbed[guest] INITIAL getUiState().state.props:", JSON.stringify(ui.state.props ?? {}), "| account=", JSON.stringify(initial.account ?? null));
+				setProps(initial);
 				setDebug("connected ✓ props=" + JSON.stringify(ui.state.props ?? {}));
 				unsubscribe = ui.subscribe((next: { props?: HostProps }) => {
+					// eslint-disable-next-line no-console
+					console.log("uiEmbed[guest] SUBSCRIBE update props:", JSON.stringify(next.props ?? {}), "| account=", JSON.stringify(next.props?.account ?? null));
 					setProps((next.props ?? {}) as HostProps);
 					setDebug("update ✓ props=" + JSON.stringify(next.props ?? {}));
 				});
