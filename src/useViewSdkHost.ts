@@ -44,64 +44,35 @@ export function useViewSdkHost(): ViewSdkHost {
 		let cancelled = false;
 		let unsubscribe: (() => void) | undefined;
 
-		// The dev-preview getViewSDK() ↔ <lightning-ui-embedding> handshake is
-		// RACY: on the same page it sometimes connects instantly and sometimes
-		// hangs forever (never resolves, never rejects). Since a retry usually
-		// wins the race, we race each getViewSDK() attempt against a timeout and
-		// retry a bounded number of times before giving up.
-		const MAX_ATTEMPTS = 6;
-		const ATTEMPT_TIMEOUT_MS = 2500;
-
-		const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
-			new Promise((resolve, reject) => {
-				const to = window.setTimeout(() => reject(new Error("attempt-timeout")), ms);
-				p.then(
-					(v) => {
-						window.clearTimeout(to);
-						resolve(v);
-					},
-					(e) => {
-						window.clearTimeout(to);
-						reject(e);
-					},
+		// Call getViewSDK() exactly ONCE. It is a singleton handshake — calling it
+		// again while the first is in flight can interfere with / invalidate the
+		// pending connection (an earlier retry loop did exactly that and broke a
+		// previously-consistent connection). So: one call, no retry, no timeout
+		// racing the SDK. If it hangs, that's a host/preview issue to chase, not
+		// something a second call fixes.
+		getViewSDK()
+			.then((sdk) => {
+				if (cancelled) return;
+				const ui = sdk.getUiState?.();
+				if (!ui) {
+					setDebug("getViewSDK() resolved but getUiState() returned nothing.");
+					return;
+				}
+				setConnected(true);
+				setProps((ui.state.props ?? {}) as HostProps);
+				setDebug("connected ✓ props=" + JSON.stringify(ui.state.props ?? {}));
+				unsubscribe = ui.subscribe((next: { props?: HostProps }) => {
+					setProps((next.props ?? {}) as HostProps);
+					setDebug("update ✓ props=" + JSON.stringify(next.props ?? {}));
+				});
+			})
+			.catch((e: unknown) => {
+				if (cancelled) return;
+				setDebug(
+					"getViewSDK() REJECTED: " +
+						(e instanceof Error ? `${e.name}: ${e.message}` : String(e)),
 				);
 			});
-
-		const connect = async () => {
-			for (let attempt = 1; attempt <= MAX_ATTEMPTS && !cancelled; attempt++) {
-				setDebug(`getViewSDK() attempt ${attempt}/${MAX_ATTEMPTS}…`);
-				try {
-					const sdk = await withTimeout(getViewSDK(), ATTEMPT_TIMEOUT_MS);
-					if (cancelled) return;
-					const ui = sdk.getUiState?.();
-					if (!ui) {
-						setDebug(`attempt ${attempt}: resolved but getUiState() empty; retrying…`);
-						continue;
-					}
-					setConnected(true);
-					setProps((ui.state.props ?? {}) as HostProps);
-					setDebug("connected ✓ props=" + JSON.stringify(ui.state.props ?? {}));
-					unsubscribe = ui.subscribe((next: { props?: HostProps }) => {
-						setProps((next.props ?? {}) as HostProps);
-						setDebug("update ✓ props=" + JSON.stringify(next.props ?? {}));
-					});
-					return; // success
-				} catch (e) {
-					if (cancelled) return;
-					const msg = e instanceof Error ? e.message : String(e);
-					setDebug(`attempt ${attempt} failed (${msg}); retrying…`);
-					// brief backoff before the next attempt
-					await new Promise((r) => window.setTimeout(r, 400));
-				}
-			}
-			if (!cancelled) {
-				setDebug(
-					`❌ getViewSDK() did not connect after ${MAX_ATTEMPTS} attempts — the host <lightning-ui-embedding> bridge isn't responding (dev-preview flakiness).`,
-				);
-			}
-		};
-
-		void connect();
 
 		return () => {
 			cancelled = true;
