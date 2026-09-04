@@ -67,6 +67,37 @@ export function useViewSdkHost(): ViewSdkHost {
 			`init: getViewSDK()… | hostMetaData=${hasHostMeta ? "PRESENT" : "MISSING"} | iframe=${(() => { try { return window.parent !== window; } catch { return true; } })()}`,
 		);
 
+		// RAW MESSAGE SNIFFER — the final decisive diagnostic. hostMetaData is
+		// PRESENT yet getViewSDK() HANGS, meaning the host never completed the port
+		// handshake. Two possibilities remain, with different fixes:
+		//   (a) host sends NOTHING back  → host/platform-side (enablement/preview) —
+		//       no guest fix exists.
+		//   (b) host DOES transfer a port but from an origin/source/instanceId that
+		//       the bridge's validator rejects → it silently drops it and waits
+		//       forever. That we could potentially address.
+		// This passive listener logs every inbound postMessage (origin, whether it
+		// carried a MessagePort, a shape hint) so we can tell (a) from (b) without
+		// guessing. It does NOT interfere with the bridge's own listener.
+		const sniffer = (ev: MessageEvent) => {
+			let shape = "";
+			try {
+				shape =
+					typeof ev.data === "object" && ev.data
+						? "keys=" + Object.keys(ev.data).slice(0, 6).join(",")
+						: "primitive:" + String(ev.data).slice(0, 40);
+			} catch {
+				shape = "unreadable";
+			}
+			// eslint-disable-next-line no-console
+			console.log(
+				"uiEmbed[guest] RAW MSG from origin=", ev.origin,
+				"| fromParent=", ev.source === window.parent,
+				"| ports=", ev.ports?.length ?? 0,
+				"|", shape,
+			);
+		};
+		window.addEventListener("message", sniffer);
+
 		// A visible "still hanging" marker: if getViewSDK() neither resolves nor
 		// rejects within 6s, the panel says so — distinguishing a true hang (host
 		// never completed the port handshake) from a fast reject (no session). This
@@ -122,6 +153,7 @@ export function useViewSdkHost(): ViewSdkHost {
 		return () => {
 			cancelled = true;
 			clearTimeout(hangTimer);
+			window.removeEventListener("message", sniffer);
 			unsubscribe?.();
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps
