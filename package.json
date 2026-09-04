@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@salesforce/experimental-mfe-bridge": "^2.2.1-rc.2",
+    "@salesforce/platform-sdk": "^11.71.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
