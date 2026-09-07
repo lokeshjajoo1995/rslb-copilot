@@ -15,6 +15,7 @@ import ReadHostData from './ReadHostData.tsx'
 import SendToHost from './SendToHost.tsx'
 import ThemeTokens from './ThemeTokens.tsx'
 import AutoResize from './AutoResize.tsx'
+import CaseSummary from './CaseSummary.tsx'
 import './embedding.css'
 
 const router = createBrowserRouter([
@@ -34,6 +35,9 @@ const router = createBrowserRouter([
       // Content-driven iframe height via the bundled EmbeddingResizer
       // (uiEmbeddingAutoResize host). No SDK call needed.
       { path: '/embedding/auto-resize', element: <AutoResize /> },
+      // Top 3 Account cases + a "Summarize" button (uiEmbeddingCaseSummary
+      // host → props.cases; POSTs to /api/summarize).
+      { path: '/embedding/case-summary', element: <CaseSummary /> },
     ],
   },
 ])
