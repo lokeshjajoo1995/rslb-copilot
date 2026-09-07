@@ -35,21 +35,61 @@ export default function CaseSummary() {
   useEffect(() => {
     let unsubscribe: (() => void) | undefined
     let cancelled = false
-    getViewSDK().then((sdk) => {
+
+    // Decisive diagnostics: the host reported "did not send ready heartbeat"
+    // and we saw NO guest logs — so getViewSDK() may be rejecting or hanging.
+    // Log boot context + BOTH branches + a hang timer so we can see which.
+    let hasHostMeta = false
+    try {
+      hasHostMeta = new URLSearchParams(window.location.search).has('hostMetaData')
+    } catch {
+      hasHostMeta = false
+    }
+    // eslint-disable-next-line no-console
+    console.log(
+      'caseSummary[guest] BOOT url=', window.location.href,
+      '| hostMetaData=', hasHostMeta,
+      '| inIframe=', (() => { try { return window.parent !== window } catch { return true } })(),
+    )
+
+    const hangTimer = setTimeout(() => {
       if (cancelled) return
-      const ui = sdk.getUiState?.()
-      if (!ui) return
       // eslint-disable-next-line no-console
-      console.log('caseSummary[guest] INITIAL props=', JSON.stringify(ui.state.props ?? {}))
-      setProps(ui.state.props as HostProps)
-      unsubscribe = ui.subscribe((next: { props?: HostProps }) => {
+      console.log('caseSummary[guest] HANG: getViewSDK() unsettled after 8s. hostMetaData=', hasHostMeta)
+    }, 8000)
+
+    getViewSDK()
+      .then((sdk) => {
+        clearTimeout(hangTimer)
+        if (cancelled) return
+        const ui = sdk.getUiState?.()
+        if (!ui) {
+          // eslint-disable-next-line no-console
+          console.log('caseSummary[guest] getViewSDK resolved but getUiState() returned nothing')
+          return
+        }
         // eslint-disable-next-line no-console
-        console.log('caseSummary[guest] SUBSCRIBE props=', JSON.stringify(next.props ?? {}))
-        setProps((next.props ?? {}) as HostProps)
+        console.log('caseSummary[guest] INITIAL props=', JSON.stringify(ui.state.props ?? {}))
+        setProps(ui.state.props as HostProps)
+        unsubscribe = ui.subscribe((next: { props?: HostProps }) => {
+          // eslint-disable-next-line no-console
+          console.log('caseSummary[guest] SUBSCRIBE props=', JSON.stringify(next.props ?? {}))
+          setProps((next.props ?? {}) as HostProps)
+        })
       })
-    })
+      .catch((e: unknown) => {
+        clearTimeout(hangTimer)
+        if (cancelled) return
+        // eslint-disable-next-line no-console
+        console.log(
+          'caseSummary[guest] getViewSDK() REJECTED:',
+          e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+        )
+      })
+
     return () => {
       cancelled = true
+      clearTimeout(hangTimer)
       unsubscribe?.()
     }
   }, [])
