@@ -57,3 +57,124 @@ html.embedding-guest #root {
 .embed-card a:hover {
   text-decoration: underline;
 }
+
+.embed-card--wide {
+  max-width: 560px;
+}
+
+/* Badges (Rating / Type pills) */
+.embed-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+}
+
+.embed-badge.tone-hot {
+  background: #fee2e2;
+  color: #7f1d1d;
+  border-color: #fecaca;
+}
+
+.embed-badge.tone-warm {
+  background: #fef3c7;
+  color: #78350f;
+  border-color: #fde68a;
+}
+
+.embed-badge.tone-cold {
+  background: #e0f2fe;
+  color: #0c4a6e;
+  border-color: #bae6fd;
+}
+
+/* Send-to-host "Current:" row */
+.embed-current {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 16px;
+}
+
+/* 3×3 scoring matrix: 1 label col + 3 fit cols */
+.embed-matrix {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr 1fr;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.embed-matrix__corner {
+  content: '';
+}
+
+.embed-matrix__colhead {
+  text-align: center;
+  font-weight: 500;
+  color: #6b7280;
+  text-transform: capitalize;
+  padding-bottom: 4px;
+}
+
+.embed-matrix__rowhead {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 8px;
+  font-weight: 500;
+  color: #6b7280;
+  text-transform: capitalize;
+}
+
+.embed-matrix__cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 12px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  font: inherit;
+  transition: filter 0.15s;
+}
+
+.embed-matrix__cell:hover:not(:disabled) {
+  filter: brightness(0.96);
+}
+
+.embed-matrix__cell:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.embed-matrix__cell-rating {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.embed-matrix__cell-type {
+  opacity: 0.7;
+}
+
+/* Cells reuse the rating tones for their background */
+.embed-matrix__cell.tone-hot {
+  background: #fee2e2;
+  color: #7f1d1d;
+}
+
+.embed-matrix__cell.tone-warm {
+  background: #fef3c7;
+  color: #78350f;
+}
+
+.embed-matrix__cell.tone-cold {
+  background: #e0f2fe;
+  color: #0c4a6e;
+}

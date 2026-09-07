@@ -11,6 +11,8 @@
 import { createBrowserRouter, RouterProvider } from 'react-router'
 import GuestLayout from './GuestLayout.tsx'
 import BasicRender from './BasicRender.tsx'
+import ReadHostData from './ReadHostData.tsx'
+import SendToHost from './SendToHost.tsx'
 import './embedding.css'
 
 const router = createBrowserRouter([
@@ -21,6 +23,10 @@ const router = createBrowserRouter([
       // The uiEmbeddingBasicRender AND uiEmbeddingReadyState LWC hosts both
       // point their src at .../embedding/basic-render, so one route serves both.
       { path: '/embedding/basic-render', element: <BasicRender /> },
+      // Live-updating read (uiEmbeddingReadHostData host).
+      { path: '/embedding/read-host-data', element: <ReadHostData /> },
+      // Guest→host scoring events (uiEmbeddingSendToHost host, onscore handler).
+      { path: '/embedding/send-to-host', element: <SendToHost /> },
     ],
   },
 ])
