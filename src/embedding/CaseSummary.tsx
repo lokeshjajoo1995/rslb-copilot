@@ -39,10 +39,14 @@ export default function CaseSummary() {
       if (cancelled) return
       const ui = sdk.getUiState?.()
       if (!ui) return
+      // eslint-disable-next-line no-console
+      console.log('caseSummary[guest] INITIAL props=', JSON.stringify(ui.state.props ?? {}))
       setProps(ui.state.props as HostProps)
-      unsubscribe = ui.subscribe((next: { props?: HostProps }) =>
-        setProps((next.props ?? {}) as HostProps),
-      )
+      unsubscribe = ui.subscribe((next: { props?: HostProps }) => {
+        // eslint-disable-next-line no-console
+        console.log('caseSummary[guest] SUBSCRIBE props=', JSON.stringify(next.props ?? {}))
+        setProps((next.props ?? {}) as HostProps)
+      })
     })
     return () => {
       cancelled = true
