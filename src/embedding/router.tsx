@@ -13,6 +13,8 @@ import GuestLayout from './GuestLayout.tsx'
 import BasicRender from './BasicRender.tsx'
 import ReadHostData from './ReadHostData.tsx'
 import SendToHost from './SendToHost.tsx'
+import ThemeTokens from './ThemeTokens.tsx'
+import AutoResize from './AutoResize.tsx'
 import './embedding.css'
 
 const router = createBrowserRouter([
@@ -27,6 +29,11 @@ const router = createBrowserRouter([
       { path: '/embedding/read-host-data', element: <ReadHostData /> },
       // Guest→host scoring events (uiEmbeddingSendToHost host, onscore handler).
       { path: '/embedding/send-to-host', element: <SendToHost /> },
+      // Host sends a theme NAME; guest flips CSS vars (uiEmbeddingThemeTokens).
+      { path: '/embedding/theme-tokens', element: <ThemeTokens /> },
+      // Content-driven iframe height via the bundled EmbeddingResizer
+      // (uiEmbeddingAutoResize host). No SDK call needed.
+      { path: '/embedding/auto-resize', element: <AutoResize /> },
     ],
   },
 ])
