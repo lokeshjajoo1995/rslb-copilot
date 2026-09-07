@@ -23,7 +23,19 @@ interface CaseRecord {
 interface HostProps {
   recordId?: string
   source?: string
-  cases?: CaseRecord[]
+  // Cases arrive as a JSON STRING (flat scalar), not a nested array — nested
+  // structures in `props` break the ui-embedding handshake. Parse in-guest.
+  casesJson?: string
+}
+
+function parseCases(json?: string): CaseRecord[] {
+  if (!json) return []
+  try {
+    const arr = JSON.parse(json)
+    return Array.isArray(arr) ? (arr as CaseRecord[]) : []
+  } catch {
+    return []
+  }
 }
 
 export default function CaseSummary() {
@@ -94,7 +106,7 @@ export default function CaseSummary() {
     }
   }, [])
 
-  const cases = props.cases ?? []
+  const cases = parseCases(props.casesJson)
   const connected = Boolean(props.recordId)
 
   async function handleSummarize() {
