@@ -1,29 +1,51 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import App from './App.tsx'
-import Embed from './Embed.tsx'
 
 const path = window.location.pathname.replace(/\/+$/, '')
+const rootEl = createRoot(document.getElementById('root')!)
 
-// Initialize the lwc-shell MFE bridge ONLY for the lwc-shell routes (/mfe, /).
-// The GA /embed route uses @salesforce/platform-sdk instead, so we must NOT
-// boot the old bridge there — it floods the console and races the SDK.
-if (path !== '/embed') {
+// Route dispatch:
+//   /embedding/*  → GA <lightning-ui-embedding> guests, faithful recipe port
+//                   (SDK 12 + react-router + GuestLayout bootstrap). This is the
+//                   path we host on Vercel for the uiEmbedding* LWC hosts.
+//   /embed        → the older single-page ui-embedding experiment (kept for now)
+//   /mfe and /    → the dev-preview lwc-shell app (login → chat → policies)
+//
+// The lwc-shell bridge (@salesforce/experimental-mfe-bridge) must boot ONLY for
+// the lwc-shell routes — never on the Platform-SDK embedding routes, where it
+// would race the SDK handshake. So we gate every legacy-bridge-bearing import
+// behind the route check and lazy-load them.
+if (path.startsWith('/embedding')) {
+  // GA embedding guests. react-router matches /embedding/<recipe> under the
+  // pathless GuestLayout that bootstraps the Platform SDK session.
+  void import('./embedding/router.tsx').then(({ EmbeddingRouter }) => {
+    rootEl.render(
+      <StrictMode>
+        <EmbeddingRouter />
+      </StrictMode>,
+    )
+  })
+} else {
+  // lwc-shell routes: boot the legacy bridge, then render.
   void import('@salesforce/experimental-mfe-bridge')
+  const embedded = window.self !== window.top || path === '/mfe' || path === '/embed'
+  if (embedded) document.documentElement.classList.add('mfe-embedded')
+
+  if (path === '/embed') {
+    void import('./Embed.tsx').then(({ default: Embed }) => {
+      rootEl.render(
+        <StrictMode>
+          <Embed />
+        </StrictMode>,
+      )
+    })
+  } else {
+    void import('./App.tsx').then(({ default: App }) => {
+      rootEl.render(
+        <StrictMode>
+          <App />
+        </StrictMode>,
+      )
+    })
+  }
 }
-
-// When embedded (in an iframe, e.g. the MFE shell or /mfe route), mark the
-// document so CSS can switch from full-viewport (100vh) to a bounded, content-
-// sized layout that the shell's auto-resize can measure.
-const embedded =
-  window.self !== window.top || path === '/mfe' || path === '/embed'
-if (embedded) document.documentElement.classList.add('mfe-embedded')
-
-// Route:
-//   /embed → GA <lightning-ui-embedding> guest (Platform SDK)
-//   /mfe and / → the dev-preview lwc-shell app (login → chat → policies)
-const root = path === '/embed' ? <Embed /> : <App />
-
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>{root}</StrictMode>,
-)

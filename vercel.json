@@ -2,7 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     { "source": "/mfe", "destination": "/index.html" },
-    { "source": "/embed", "destination": "/index.html" }
+    { "source": "/embed", "destination": "/index.html" },
+    { "source": "/embedding/(.*)", "destination": "/index.html" }
   ],
   "headers": [
     {
