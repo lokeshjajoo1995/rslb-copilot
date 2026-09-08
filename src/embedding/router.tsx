@@ -18,6 +18,7 @@ import AutoResize from './AutoResize.tsx'
 import CaseSummary from './CaseSummary.tsx'
 import FileList from './FileList.tsx'
 import CoPilot from './CoPilot.tsx'
+import Spike from './Spike.tsx'
 import './embedding.css'
 
 const router = createBrowserRouter([
@@ -46,6 +47,9 @@ const router = createBrowserRouter([
       // Aggregating "app" guest: login gate → dashboard of panels
       // (uiEmbeddingCoPilot host → account + cases + files in one payload).
       { path: '/embedding/copilot', element: <CoPilot /> },
+      // SPIKE (throwaway): validates post-connect props updates + workspace API
+      // from the utility bar. Delete with uiEmbeddingSpike after validation.
+      { path: '/embedding/spike', element: <Spike /> },
     ],
   },
 ])
