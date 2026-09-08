@@ -17,6 +17,7 @@ import ThemeTokens from './ThemeTokens.tsx'
 import AutoResize from './AutoResize.tsx'
 import CaseSummary from './CaseSummary.tsx'
 import FileList from './FileList.tsx'
+import CoPilot from './CoPilot.tsx'
 import './embedding.css'
 
 const router = createBrowserRouter([
@@ -42,6 +43,9 @@ const router = createBrowserRouter([
       // Account files (metadata only) linking to the SF viewer
       // (uiEmbeddingFileList host → props.filesJson + orgUrl).
       { path: '/embedding/file-list', element: <FileList /> },
+      // Aggregating "app" guest: login gate → dashboard of panels
+      // (uiEmbeddingCoPilot host → account + cases + files in one payload).
+      { path: '/embedding/copilot', element: <CoPilot /> },
     ],
   },
 ])

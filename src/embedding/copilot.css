@@ -1,0 +1,130 @@
+/* CoPilot app — login gate + dashboard. Layered on top of embedding.css. */
+
+/* ---- Login ---- */
+.cp-login {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #1a2a3a;
+  padding: 24px 16px;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.cp-login__header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.cp-login__icon {
+  font-size: 28px;
+}
+
+.cp-login__title {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.cp-login__card {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 20px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cp-field label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.cp-field input {
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+}
+
+.cp-field input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.cp-login__btn {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px;
+  border: none;
+  border-radius: 6px;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+}
+
+.cp-login__btn:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.cp-login__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cp-login__hint {
+  font-size: 12px;
+  color: #6b7280;
+  text-align: center;
+  margin: 0;
+}
+
+/* ---- Dashboard ---- */
+.cp-dashboard {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #1a2a3a;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cp-dashboard__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cp-dashboard__header h1 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+  flex: 1;
+}
+
+.cp-pill {
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #6b7280;
+  border: 1px solid #e5e7eb;
+}
+
+.cp-pill--ok {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #bbf7d0;
+}
