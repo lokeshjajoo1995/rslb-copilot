@@ -16,6 +16,7 @@ import SendToHost from './SendToHost.tsx'
 import ThemeTokens from './ThemeTokens.tsx'
 import AutoResize from './AutoResize.tsx'
 import CaseSummary from './CaseSummary.tsx'
+import FileList from './FileList.tsx'
 import './embedding.css'
 
 const router = createBrowserRouter([
@@ -38,6 +39,9 @@ const router = createBrowserRouter([
       // Top 3 Account cases + a "Summarize" button (uiEmbeddingCaseSummary
       // host → props.cases; POSTs to /api/summarize).
       { path: '/embedding/case-summary', element: <CaseSummary /> },
+      // Account files (metadata only) linking to the SF viewer
+      // (uiEmbeddingFileList host → props.filesJson + orgUrl).
+      { path: '/embedding/file-list', element: <FileList /> },
     ],
   },
 ])
