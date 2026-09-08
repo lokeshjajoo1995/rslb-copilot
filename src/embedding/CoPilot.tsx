@@ -29,14 +29,17 @@ function Login({ connected, onLogin }: { connected: boolean; onLogin: () => void
   const [agentCode, setAgentCode] = useState('')
   const [password, setPassword] = useState('')
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    // Demo gate: any non-blank agent code + password logs in.
-    if (agentCode.trim() && password.trim()) onLogin()
-  }
-
   const canSubmit = agentCode.trim().length > 0 && password.trim().length > 0
 
+  function handleLogin() {
+    // Demo gate: any non-blank agent code + password logs in.
+    if (canSubmit) onLogin()
+  }
+
+  // NOTE: a plain <div> + button onClick, NOT a <form>. The embedding iframe's
+  // sandbox blocks form submission unless allow-forms is set; using onClick
+  // avoids depending on it. (The host also adds allow-forms as a belt-and-
+  // suspenders fix.) Enter-to-submit is wired via onKeyDown on the inputs.
   return (
     <div className="cp-login">
       <header className="cp-login__header">
@@ -44,7 +47,7 @@ function Login({ connected, onLogin }: { connected: boolean; onLogin: () => void
         <h1 className="cp-login__title">RS Living Benefits CoPilot</h1>
       </header>
 
-      <form className="cp-login__card" onSubmit={handleSubmit}>
+      <div className="cp-login__card">
         <div className="cp-field">
           <label htmlFor="agentCode">Agent Code</label>
           <input
@@ -53,6 +56,7 @@ function Login({ connected, onLogin }: { connected: boolean; onLogin: () => void
             placeholder="Enter your agent code"
             value={agentCode}
             onChange={(e) => setAgentCode(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
           />
         </div>
         <div className="cp-field">
@@ -63,15 +67,16 @@ function Login({ connected, onLogin }: { connected: boolean; onLogin: () => void
             placeholder="Enter your password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
           />
         </div>
-        <button type="submit" className="cp-login__btn" disabled={!canSubmit}>
+        <button type="button" className="cp-login__btn" disabled={!canSubmit} onClick={handleLogin}>
           Login
         </button>
         <p className="cp-login__hint">
           {connected ? 'Connected to Salesforce ✓' : 'Connecting…'}
         </p>
-      </form>
+      </div>
     </div>
   )
 }
