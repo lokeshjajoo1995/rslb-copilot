@@ -12,7 +12,12 @@
  *      A collapsible sidebar shows that context (account, cases, files).
  */
 import { useState, useRef, useEffect } from 'react'
-import { useCoPilotHost, type CaseRecord, type FileRecord } from './useCoPilotHost'
+import {
+  useCoPilotHost,
+  type CaseRecord,
+  type FileRecord,
+  type CaseDetail,
+} from './useCoPilotHost'
 import './embedding.css'
 import './copilot.css'
 
@@ -85,7 +90,7 @@ function Login({ connected, onLogin }: { connected: boolean; onLogin: () => void
 
 /* ---------- Chat (main view) ---------- */
 interface ChatMessage {
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'system'
   content: string
 }
 
@@ -95,6 +100,64 @@ const SUGGESTIONS = [
   'How many open cases?',
   'List the files',
 ]
+
+// "more details" intent — only matched when the phrasing signals wanting MORE
+// than the summary we already have (details/full/tell me more/who owns…).
+const DETAIL_INTENT =
+  /\b(more|detail|details|full|elaborate|expand|who\s+owns|owner|opened|created|closed|origin|reason)\b/i
+
+/**
+ * Given a chat question, decide if it's asking for deeper detail on a specific
+ * case and, if so, which case (by number or subject) from the ones in context.
+ * Returns the matched CaseRecord's caseNumber, or null if no clear match.
+ */
+function resolveCaseForDetail(question: string, cases: CaseRecord[]): string | null {
+  if (!DETAIL_INTENT.test(question) || cases.length === 0) return null
+  const q = question.toLowerCase()
+
+  // 1) Explicit case number (with or without leading zeros / a '#').
+  const numMatch = q.match(/#?\s*0*([0-9]{3,})/)
+  if (numMatch) {
+    const typed = numMatch[1]
+    const hit = cases.find((c) => {
+      const cn = (c.caseNumber ?? '').replace(/^0+/, '')
+      return cn === typed || (c.caseNumber ?? '') === numMatch[0].replace(/[^0-9]/g, '')
+    })
+    if (hit?.caseNumber) return hit.caseNumber
+  }
+
+  // 2) Subject keyword overlap — pick the case whose subject shares the most
+  //    non-trivial words with the question.
+  let best: { cn: string; score: number } | null = null
+  for (const c of cases) {
+    const subj = (c.subject ?? '').toLowerCase()
+    if (!subj || !c.caseNumber) continue
+    const words = subj.split(/\W+/).filter((w) => w.length >= 4)
+    const score = words.filter((w) => q.includes(w)).length
+    if (score > 0 && (!best || score > best.score)) best = { cn: c.caseNumber, score }
+  }
+  return best?.cn ?? null
+}
+
+function formatCaseDetail(d: CaseDetail): string {
+  if (d.error) return `⚠ ${d.error}`
+  const lines: string[] = []
+  lines.push(`Case ${d.caseNumber || ''} — ${d.subject || '(no subject)'}`.trim())
+  const kv: [string, string | undefined][] = [
+    ['Status', d.status],
+    ['Priority', d.priority],
+    ['Type', d.type],
+    ['Reason', d.reason],
+    ['Origin', d.origin],
+    ['Owner', d.owner],
+    ['Contact', d.contact],
+    ['Opened', d.createdDate],
+    ['Closed', d.closedDate],
+  ]
+  for (const [k, v] of kv) if (v) lines.push(`${k}: ${v}`)
+  if (d.description) lines.push('', `Description:\n${d.description}`)
+  return lines.join('\n')
+}
 
 function Chat({ host }: { host: ReturnType<typeof useCoPilotHost> }) {
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -109,10 +172,55 @@ function Chat({ host }: { host: ReturnType<typeof useCoPilotHost> }) {
   const [busy, setBusy] = useState(false)
   const [showContext, setShowContext] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
+  const lastTokenRef = useRef<number | undefined>(host.contextToken)
+  // Track the case-detail token so we render each host answer exactly once.
+  const lastDetailTokenRef = useRef<number | undefined>(host.caseDetailToken)
+  // True while we've asked the host for a detail and are awaiting the push.
+  const awaitingDetailRef = useRef(false)
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, busy])
+
+  // Utility-bar flow: when the focused tab resolves to a NEW context, the host
+  // bumps contextToken. Keep the conversation, just drop in a system line so the
+  // agent knows subsequent answers are about the new account. The record-page
+  // host never sends contextToken (undefined), so this stays inert there.
+  useEffect(() => {
+    const token = host.contextToken
+    if (token === undefined) return
+    if (lastTokenRef.current === undefined) {
+      lastTokenRef.current = token
+      return
+    }
+    if (token === lastTokenRef.current) return
+    lastTokenRef.current = token
+    const label = host.account?.name
+      ? `Context changed to ${host.account.name}`
+      : 'Context cleared — no account in focus'
+    setMessages((m) => [...m, { role: 'system', content: label }])
+  }, [host.contextToken, host.account?.name])
+
+  // Runtime case-detail answers: when the host bumps caseDetailToken, a fresh
+  // detail (or error) has arrived. Render it as an assistant message — but only
+  // if WE asked for it (awaitingDetailRef), and only once per token.
+  useEffect(() => {
+    const token = host.caseDetailToken
+    if (token === undefined) return
+    if (lastDetailTokenRef.current === undefined) {
+      lastDetailTokenRef.current = token
+      return
+    }
+    if (token === lastDetailTokenRef.current) return
+    lastDetailTokenRef.current = token
+    if (!awaitingDetailRef.current) return
+    awaitingDetailRef.current = false
+    setBusy(false)
+    const content = host.caseDetail
+      ? formatCaseDetail(host.caseDetail)
+      : '⚠ No details returned for that case.'
+    setMessages((m) => [...m, { role: 'assistant', content }])
+  }, [host.caseDetailToken, host.caseDetail])
 
   async function ask(question: string) {
     const q = question.trim()
@@ -120,6 +228,42 @@ function Chat({ host }: { host: ReturnType<typeof useCoPilotHost> }) {
     setInput('')
     setMessages((m) => [...m, { role: 'user', content: q }])
     setBusy(true)
+
+    // Runtime detail intent → round-trip through the host (Salesforce), not the
+    // Vercel /api/chat. The answer arrives via the caseDetailToken effect above.
+    const caseNumber = resolveCaseForDetail(q, host.cases)
+    if (caseNumber) {
+      if (!host.connected) {
+        setMessages((m) => [
+          ...m,
+          { role: 'assistant', content: '⚠ Not connected to Salesforce — can’t pull live case details here.' },
+        ])
+        setBusy(false)
+        return
+      }
+      awaitingDetailRef.current = true
+      try {
+        await host.requestCaseDetail(caseNumber)
+        // busy stays true until the host pushes the detail (token effect clears it).
+        // Safety net: if no answer lands in 12s, stop waiting and surface it.
+        window.setTimeout(() => {
+          if (!awaitingDetailRef.current) return
+          awaitingDetailRef.current = false
+          setBusy(false)
+          setMessages((m) => [
+            ...m,
+            { role: 'assistant', content: '⚠ Timed out fetching that case’s details.' },
+          ])
+        }, 12000)
+      } catch (e) {
+        awaitingDetailRef.current = false
+        const msg = e instanceof Error ? e.message : String(e)
+        setMessages((m) => [...m, { role: 'assistant', content: `⚠ ${msg}` }])
+        setBusy(false)
+      }
+      return
+    }
+
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -167,11 +311,17 @@ function Chat({ host }: { host: ReturnType<typeof useCoPilotHost> }) {
       )}
 
       <div className="cp-messages">
-        {messages.map((m, i) => (
-          <div key={i} className={`cp-msg cp-msg--${m.role}`}>
-            <pre className="cp-msg__bubble">{m.content}</pre>
-          </div>
-        ))}
+        {messages.map((m, i) =>
+          m.role === 'system' ? (
+            <div key={i} className="cp-msg cp-msg--system">
+              <span className="cp-msg__notice">🔄 {m.content}</span>
+            </div>
+          ) : (
+            <div key={i} className={`cp-msg cp-msg--${m.role}`}>
+              <pre className="cp-msg__bubble">{m.content}</pre>
+            </div>
+          )
+        )}
         {busy && (
           <div className="cp-msg cp-msg--assistant">
             <div className="cp-msg__bubble cp-msg__bubble--typing">…</div>
