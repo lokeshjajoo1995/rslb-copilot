@@ -3,18 +3,22 @@ import { applyCors } from "./_data/cors.js";
 /**
  * POST /api/summary
  * Body: {
- *   account?: { name, id, email },
- *   cases?:   [{ caseNumber, subject, description, priority, status }],
- *   files?:   [{ title, fileType, sizeBytes, docId }]
+ *   account?:  { name, id, email },
+ *   cases?:    [{ caseNumber, subject, description, priority, status }],
+ *   files?:    [{ title, fileType, sizeBytes, docId }],
+ *   policies?: [{ policyNumber, productName, policyType, status, description }]
  * }
  * Returns: { summary: string }
  *
  * Rule-based (no LLM, no API key): composes a DETAILED account-level briefing
- * across all three context slices the CoPilot holds — account facts, case
- * posture (counts, priority/status breakdown, high-priority + open callouts),
- * and a file overview. This is the "detailed summary" the guest requests when
- * the user asks for it. Same swap-in seam as /api/chat: replace the body with
- * an Anthropic call (context → completion) later without changing the guest.
+ * across all context slices the CoPilot holds — account facts, policy posture
+ * (active/inactive counts, by type), case posture (counts, priority/status
+ * breakdown, high-priority + open callouts), and a file overview. This is the
+ * "detailed summary" the guest requests when the user asks for it. Same swap-in
+ * seam as /api/chat: replace the body with an Anthropic call later.
+ *
+ * `policies` is OPTIONAL — older hosts that don't send it degrade gracefully
+ * (the policies section is simply omitted).
  */
 export default function handler(req, res) {
 	if (applyCors(req, res)) return;
@@ -28,11 +32,12 @@ export default function handler(req, res) {
 	const account = req.body?.account ?? null;
 	const cases = Array.isArray(req.body?.cases) ? req.body.cases : [];
 	const files = Array.isArray(req.body?.files) ? req.body.files : [];
+	const policies = Array.isArray(req.body?.policies) ? req.body.policies : [];
 
-	res.status(200).json({ summary: buildSummary({ account, cases, files }) });
+	res.status(200).json({ summary: buildSummary({ account, cases, files, policies }) });
 }
 
-function buildSummary({ account, cases, files }) {
+function buildSummary({ account, cases, files, policies }) {
 	const sections = [];
 
 	// ---- Account ----
@@ -44,6 +49,11 @@ function buildSummary({ account, cases, files }) {
 		sections.push("Account: no account in context.");
 	}
 
+	// ---- Policies ---- (optional; omitted entirely when the host sends none)
+	if (policies.length) {
+		sections.push(summarizePolicies(policies));
+	}
+
 	// ---- Cases ----
 	sections.push(summarizeCases(cases));
 
@@ -51,9 +61,31 @@ function buildSummary({ account, cases, files }) {
 	sections.push(summarizeFiles(files));
 
 	// ---- Overall posture (one-line takeaway) ----
-	sections.push(takeaway(cases, files));
+	sections.push(takeaway(cases, files, policies));
 
 	return sections.join("\n\n");
+}
+
+function summarizePolicies(policies) {
+	const n = policies.length;
+	const active = policies.filter((p) => /active|in ?force/i.test(norm(p.status)));
+	const byType = countBy(policies, (p) => norm(p.policyType) || "Unspecified");
+
+	const lines = [];
+	lines.push(
+		`Policies: ${n} on record` +
+			(active.length ? `, ${active.length} active.` : "."),
+	);
+	lines.push(`  • By type: ${describeCounts(byType)}.`);
+	policies.slice(0, 5).forEach((p) => {
+		const num = norm(p.policyNumber) || "(no number)";
+		const product = norm(p.productName);
+		const type = norm(p.policyType);
+		const status = norm(p.status) || "—";
+		const label = [product, type].filter(Boolean).join(" ") || "policy";
+		lines.push(`      - ${num}: ${label} [${status}]`);
+	});
+	return lines.join("\n");
 }
 
 function summarizeCases(cases) {
@@ -98,22 +130,28 @@ function summarizeFiles(files) {
 	return lines.join("\n");
 }
 
-function takeaway(cases, files) {
+function takeaway(cases, files, policies = []) {
 	const open = cases.filter((c) => !/closed|resolved/i.test(norm(c.status))).length;
 	const high = cases.filter((c) => /high|urgent|critical/i.test(norm(c.priority))).length;
+	const activePolicies = policies.filter((p) => /active|in ?force/i.test(norm(p.status))).length;
 
+	// Lead with the case posture (the actionable part), then note policy standing.
+	let lead;
 	if (high > 0) {
-		return `Takeaway: prioritize the ${high} high-priority case${high === 1 ? "" : "s"} — they need attention first.`;
+		lead = `prioritize the ${high} high-priority case${high === 1 ? "" : "s"} — they need attention first`;
+	} else if (open > 0) {
+		lead = `${open} open case${open === 1 ? "" : "s"} to work through; no high-priority escalations`;
+	} else if (cases.length > 0) {
+		lead = "all cases are closed/resolved";
+	} else {
+		lead = "no active cases";
 	}
-	if (open > 0) {
-		return `Takeaway: ${open} open case${open === 1 ? "" : "s"} to work through; no high-priority escalations.`;
-	}
-	if (cases.length > 0) {
-		return "Takeaway: all cases are closed/resolved — account is in good standing.";
-	}
-	return files.length > 0
-		? "Takeaway: no active cases; documents are on file for reference."
-		: "Takeaway: quiet account — no active cases or files.";
+
+	const policyNote = policies.length
+		? ` ${activePolicies} active polic${activePolicies === 1 ? "y" : "ies"} on file.`
+		: "";
+
+	return `Takeaway: ${lead}.${policyNote}`.replace(".. ", ". ");
 }
 
 function countBy(arr, keyFn) {
