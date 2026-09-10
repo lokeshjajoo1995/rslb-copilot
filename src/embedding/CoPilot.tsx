@@ -95,9 +95,9 @@ interface ChatMessage {
 }
 
 const SUGGESTIONS = [
+  'Detailed summary',
   'Summarize the cases',
   'Any high priority cases?',
-  'How many open cases?',
   'List the files',
 ]
 
@@ -105,6 +105,14 @@ const SUGGESTIONS = [
 // than the summary we already have (details/full/tell me more/who owns…).
 const DETAIL_INTENT =
   /\b(more|detail|details|full|elaborate|expand|who\s+owns|owner|opened|created|closed|origin|reason)\b/i
+
+// "detailed summary" intent — a holistic account briefing (account + cases +
+// files), served by the /api/summary endpoint. Matched when the user asks for a
+// detailed/full/overall summary or briefing of the account. Checked BEFORE the
+// per-case detail intent so "detailed summary" doesn't get captured as a case
+// lookup (both share the word "detail").
+const SUMMARY_INTENT =
+  /\b(detailed|detail|full|overall|complete|deep)\b.*\b(summary|overview|briefing|brief|rundown|picture)\b|\b(summari[sz]e|brief)\b.*\b(account|everything|all)\b/i
 
 /**
  * Given a chat question, decide if it's asking for deeper detail on a specific
@@ -228,6 +236,34 @@ function Chat({ host }: { host: ReturnType<typeof useCoPilotHost> }) {
     setInput('')
     setMessages((m) => [...m, { role: 'user', content: q }])
     setBusy(true)
+
+    // "detailed summary" intent → holistic account briefing from /api/summary.
+    // Checked FIRST so it isn't captured by the per-case detail intent below
+    // (both share the word "detail"). Guest fetches the endpoint directly, same
+    // as /api/chat — the whole account/cases/files context is sent along.
+    if (SUMMARY_INTENT.test(q)) {
+      try {
+        const res = await fetch('/api/summary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            account: host.account,
+            cases: host.cases,
+            files: host.files,
+          }),
+        })
+        if (!res.ok) throw new Error(`Request failed (${res.status})`)
+        const data = (await res.json()) as { summary?: string; error?: string }
+        const content = data.error ? `⚠ ${data.error}` : data.summary ?? '(no summary)'
+        setMessages((m) => [...m, { role: 'assistant', content }])
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setMessages((m) => [...m, { role: 'assistant', content: `⚠ ${msg}` }])
+      } finally {
+        setBusy(false)
+      }
+      return
+    }
 
     // Runtime detail intent → round-trip through the host (Salesforce), not the
     // Vercel /api/chat. The answer arrives via the caseDetailToken effect above.

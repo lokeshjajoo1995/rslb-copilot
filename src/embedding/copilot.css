@@ -139,6 +139,17 @@
   max-height: 100vh;
 }
 
+/* When EMBEDDED via <lightning-ui-embedding>, the bridge auto-resizes the
+   iframe to the guest's content height. A 100vh root then feeds a loop:
+   content is 100vh → iframe grows → 100vh grows → content grows → … (infinite
+   scroll). So inside the embed, pin the chat to a FIXED height and let the
+   message list scroll internally instead of the iframe growing. Standalone
+   (no auto-resizer) keeps 100vh. GuestLayout adds .embedding-guest to <html>. */
+html.embedding-guest .cp-chat {
+  height: 640px;
+  max-height: 640px;
+}
+
 .cp-chat__header {
   display: flex;
   align-items: center;
